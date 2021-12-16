@@ -178,7 +178,7 @@ class CtrlCommand extends Command
          * That's fine, but the APP_URL is always ctrl-client.test
          * In this case, the differentiating factor will be the database, so...
          */
-        if (env('APP_URL') == 'http://ctrl-client.test') {
+        if (env('APP_URL') == 'http://ctrl-client-wrapper.test') {
             $schema = env('TYPESENSE_SCHEMA');
             /**
              * Note that this isn't ideal, as we're still only able to sync one site at once

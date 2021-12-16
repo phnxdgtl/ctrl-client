@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 
 use Phnxdgtl\CtrlClient\CtrlClientController;
 
-Route::middleware(['ctrl'])->prefix('ctrl')->group(function () {
+Route::middleware(['ctrl-client'])->prefix('ctrl-client')->group(function () {
 	Route::get('test',  [CtrlClientController::class, 'test']);
 	// TODO: these any() routes should all be post(), I think. And why is getDatabaseStructure a (valid) get request?
 	Route::any('get-table-data', [CtrlClientController::class, 'getTableData']);

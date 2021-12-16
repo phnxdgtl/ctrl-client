@@ -36,6 +36,6 @@ class CtrlClientServiceProvider extends ServiceProvider
         $this->loadViewsFrom(__DIR__.'/views', 'ctrl');
 
         $router = $this->app->make(Router::class);
-        $router->aliasMiddleware('ctrl', CtrlToken::class);
+        $router->aliasMiddleware('ctrl-client', CtrlToken::class);
     }
 }

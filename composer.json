@@ -1,0 +1,20 @@
+{
+    "name": "phnxdgtl/ctrl-client",
+    "autoload": {
+        "psr-4": {
+            "Phnxdgtl\\CtrlClient\\": "packages/phnxdgtl/ctrl-client/src"
+        }
+    },
+    "require": {
+        "yajra/laravel-datatables": "^1.5",
+        "php-http/curl-client": "^2.2",
+        "typesense/typesense-php": "^4.7"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Phnxdgtl\\CtrlClient\\CtrlClientServiceProvider"
+            ]
+        }
+    }
+}

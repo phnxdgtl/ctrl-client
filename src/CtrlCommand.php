@@ -81,7 +81,7 @@ class CtrlCommand extends Command
                 $this->search();
                 break;
             default:
-                $this->error(sprintf("Unrecognised command %s", $args[0]));
+                $this->error(sprintf("Unrecognised command %s", $command));
         }
         return Command::SUCCESS;
     }

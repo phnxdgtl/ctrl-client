@@ -342,6 +342,16 @@ class CtrlClientController extends Controller
 		$data       = $request->input('ctrl_data');
 
 		/**
+		 * Convert any null values to '', to prevent MySQL insertion errors when a field can't be null
+		 * This may break relationship inserts? TBC
+		 */
+		array_walk($data, function(&$item) {
+			if (is_null($item)) {
+				$item = '';
+			}
+		});
+
+		/**
 		 * If we have a custom model, use Eloquent. Otherwise, just run a DB query
 		 */
 		$model = $this->getModelNameFromTableName($table_name);
@@ -386,13 +396,7 @@ class CtrlClientController extends Controller
 		$table_name    = $request->input('ctrl_table_name');		
 		$table_headers = array_merge($request->input('ctrl_table_headers') ?? [], ['id']);
 
-		/**
-		 * TODO: ctrl_filters here should definitely just be the filtered querystring.
-		 * Why are we getting odd DataTable values in it, like 'order'
-		 */
-
 		$filters = $request->input('ctrl_filters');
-		Log::debug("Filters", $filters);
 		/**
 		 * If we have a custom model, use Eloquent. Otherwise, just run a DB query
 		 */
@@ -433,6 +437,9 @@ class CtrlClientController extends Controller
 		 */
 		$datatables->setRowId('id-{{$id}}');
 		
+		/**
+		 * Add datatable buttons
+		 */
 		$row_buttons = $request->input('ctrl_row_buttons') ?? [];	
         if ($row_buttons) {
             $datatables->addColumn('action', function ($row) use ($row_buttons) {						
@@ -442,6 +449,21 @@ class CtrlClientController extends Controller
                 return view('ctrl::row-buttons', ['row_buttons'=>$row_buttons]);
             });
         }
+
+		/**
+		 * Process certain columns so that they're rendered differently
+		 * TODO: at this point, we don't know anything about each column;
+		 * we don't know whether it's an image or WYSIWYG or what.
+		 * We could potentially pass this to the API; this is TBC
+		 */
+
+		// At the moment, we might as well just set every column to a certain length; no harm in it.
+		foreach ($table_headers as $table_header) {
+        	$datatables->editColumn($table_header, function($object) use ($table_header) {				
+				return Str::words(html_entity_decode(strip_tags($object->$table_header)), 15, '...');	    		
+        	});
+		}
+
 		return $datatables->toJson();
 	}
 

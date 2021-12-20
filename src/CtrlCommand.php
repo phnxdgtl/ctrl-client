@@ -175,27 +175,14 @@ class CtrlCommand extends Command
     }
 
     protected function getSchemaName() {
+     
+        $schema_name = request()->getHttpHost();
 
-        /**
-         * While testing, we run various dummy sites as *.ctrl-client.test
-         * That's fine, but the APP_URL is always ctrl-client.test
-         * In this case, the differentiating factor will be the database, so...
-         */
-        if (env('APP_URL') == 'http://ctrl-client-wrapper.test') {
-            $schema = env('TYPESENSE_SCHEMA');
-            /**
-             * Note that this isn't ideal, as we're still only able to sync one site at once
-             * but for the purposes of testing, it'll do.
-             */
-        } else {
-            $schema = parse_url(env('APP_URL'), PHP_URL_HOST);
-        }
-
-        if (!$schema) {
+        if (!$schema_name) {
             $this->error("Cannot generate schema name from URL");
             exit();
         }
-        return $schema;
+        return $schema_name;
     }
 
     protected function schemaExists($client, $schema_name) {

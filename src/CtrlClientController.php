@@ -384,6 +384,36 @@ class CtrlClientController extends Controller
 		]);
 	}
 
+	/**
+	 * Delete an object
+     * @param Request $request 
+     * @return mixed 
+     */
+    public function deleteObject(Request $request) {
+		
+		/**
+		 * TODO: use validation here
+		 */
+		$table_name = $request->input('ctrl_table_name');
+		$object_id  = $request->input('ctrl_object_id');
+
+		/**
+		 * If we have a custom model, use Eloquent. Otherwise, just run a DB query
+		 */
+		$model = $this->getModelNameFromTableName($table_name);
+		if (class_exists($model)) {						
+			$object = $model::findOrFail($object_id);	
+			$object->delete();	
+		} else {
+			DB::table($table_name)->where('id', $object_id)->delete();
+		}		
+
+		return response()->json([
+			'success'   => true
+		]);
+	}
+
+
     /**
 	 * Return data in a Datatables format
      * @param Request $request 

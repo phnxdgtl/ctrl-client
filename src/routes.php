@@ -10,6 +10,9 @@ Route::middleware(['ctrl-client'])->prefix('ctrl-client')->group(function () {
 	Route::any('get-table-data', [CtrlClientController::class, 'getTableData']);
 	Route::any('get-object-data', [CtrlClientController::class, 'getObjectData']);
 	Route::any('put-object-data', [CtrlClientController::class, 'putObjectData']);
+	Route::any('delete-object', [CtrlClientController::class, 'deleteObject']);
+
+
 	Route::any('get-possible-values', [CtrlClientController::class, 'getPossibleValues']);
 	Route::any('get-related-values', [CtrlClientController::class, 'getRelatedValues']);
 	Route::any('put-related-values', [CtrlClientController::class, 'putRelatedValues']);

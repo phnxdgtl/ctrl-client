@@ -9,6 +9,7 @@ use Typesense\Client as TypesenseClient;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\File;
 
 class CtrlCommand extends Command
 {
@@ -52,7 +53,7 @@ class CtrlCommand extends Command
         } else {
             if (is_array($position)) {
                 if (count($args) < count($position)) {
-                    $this->error("Not enough arguments available");
+                    $this->error("Not enough arguments available");                    
                 } else {
                     $return = [];
                     foreach ($position as $p) {
@@ -75,10 +76,12 @@ class CtrlCommand extends Command
     {        
 
         $command = $this->getArgs(1);
-
         switch ($command) {
             case 'search':
                 $this->search();
+                break;
+            case 'images':
+                $this->imagesToS3();
                 break;
             default:
                 $this->error(sprintf("Unrecognised command %s", $command));

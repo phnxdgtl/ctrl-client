@@ -9,7 +9,8 @@
         "laravel/framework": "8.*",
         "yajra/laravel-datatables": "^1.5",
         "php-http/curl-client": "^2.2",
-        "typesense/typesense-php": "^4.7"
+        "typesense/typesense-php": "^4.7",
+        "intervention/image": "^2.7"
     },
     "extra": {
         "laravel": {

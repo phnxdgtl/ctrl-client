@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\Log;
 
 use Yajra\DataTables\DataTables;
 
+use Intervention\Image\Facades\Image;
+use Intervention\Image\Exception\NotReadableException;
+
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Artisan;
 
@@ -36,8 +40,9 @@ class CtrlClientController extends Controller
     public function getObjectData(Request $request) {
 
 		$input = $this->validateRequest($request, [
-			'ctrl_table_name' => 'required',
-			'ctrl_object_id'  => 'required',
+			'ctrl_table_name'        => 'required',
+			'ctrl_object_id'         => 'required',
+			'ctrl_object_properties' => 'required',
 		]);
 
 		/**
@@ -50,18 +55,41 @@ class CtrlClientController extends Controller
 		}
 
 		/**
+		 * object_properties here is an array of column_name=>field_type pairs
+		 **/		
+		$object_properties = array_merge($request->input('ctrl_object_properties') ?? [], ['id'=>'number']);
+
+		/**
 		 * If we have a custom model, use Eloquent. Otherwise, just run a DB query
 		 */
+
+		/**
+		 * Only select the required headers, for speed;
+		 * we may not want to do this when loading an eloquent model?
+		 */
+		$select = array_keys($object_properties);
+
 		$model = $this->getModelNameFromTableName($input['table_name']);
 		if (class_exists($model)) {		
-			$object_data = $model::findOrFail($input['object_id']);
+			$object_data = $model::select($select)->findOrFail($input['object_id']);
 		} else {
-			$object_data = DB::table($input['table_name'])->find($input['object_id']);
+			$object_data = DB::table($input['table_name'])->select($select)->find($input['object_id']);
 		}
 
 		/**
-		 * TODO: consider limiting this endpoint to only return certain fields, as per tableData
+		 * Now... we want to thumbnail any images, so that we can render them in the preview when editing
 		 */
+		foreach ($object_properties as $column=>$field_type) {
+			if ($field_type == 'image') {
+				$path                 = $object_data->$column;
+				$thumbnail_name       = sprintf('%s/%s', $object_data->id, $column);
+
+				$object_data->$column = $this->getThumbnameUrlFromImagePath($path, 1600, 200, $thumbnail_name);
+				$object_data->{$column.'_thumbnail'} = $this->getThumbnameUrlFromImagePath($path, 1600, 200, $thumbnail_name);
+
+			}
+		}
+
 		return response()->json($object_data);
 	}
 
@@ -423,8 +451,11 @@ class CtrlClientController extends Controller
 
 		// TODO: add validation here
 		
-		$table_name    = $request->input('ctrl_table_name');		
-		$table_headers = array_merge($request->input('ctrl_table_headers') ?? [], ['id']);
+		$table_name    = $request->input('ctrl_table_name');
+		/**
+		 * table_headers here is an array of column_name=>field_type pairs
+		 **/		
+		$table_headers = array_merge($request->input('ctrl_table_headers') ?? [], ['id'=>'number']);
 
 		$filters = $request->input('ctrl_filters');
 		/**
@@ -459,7 +490,7 @@ class CtrlClientController extends Controller
 		 * Only select the required headers, for speed;
 		 * we may not want to do this when loading an eloquent model?
 		 */
-		$data->select($table_headers);
+		$data->select(array_keys($table_headers));
 		$datatables = DataTables::of($data);
 		
 		/**
@@ -481,20 +512,80 @@ class CtrlClientController extends Controller
         }
 
 		/**
-		 * Process certain columns so that they're rendered differently
-		 * TODO: at this point, we don't know anything about each column;
-		 * we don't know whether it's an image or WYSIWYG or what.
-		 * We could potentially pass this to the API; this is TBC
+		 * Process certain columns so that they're rendered differently	
+		 * Also allow us to render HTML in some columns; see https://yajrabox.com/docs/laravel-datatables/master/xss#raw	
 		 */
-
-		// At the moment, we might as well just set every column to a certain length; no harm in it.
-		foreach ($table_headers as $table_header) {
-        	$datatables->editColumn($table_header, function($object) use ($table_header) {				
-				return Str::words(html_entity_decode(strip_tags($object->$table_header)), 15, '...');	    		
-        	});
+		$raw_columns = [];
+		foreach ($table_headers as $column=>$field_type) {
+			if (in_array($field_type, ['text', 'textarea', 'wysiwyg'])) {
+				$datatables->editColumn($column, function($object) use ($column) {				
+					return Str::words(html_entity_decode(strip_tags($object->$column)), 15, '...');	    		
+				});
+			} else if (in_array($field_type, ['image'])) {
+				$datatables->editColumn($column, function($object) use ($column) {				
+					if (config('filesystems.disks.ctrl', false)) {
+						try {		
+							$path  = $object->$column;
+							$thumbnail_name = sprintf('%s/%s', $object->id, $column);							
+							$image_url = $this->getThumbnameUrlFromImagePath($path, 50, 50, $thumbnail_name);							
+							return sprintf('<img src="%s">', $image_url);
+						} catch(NotReadableException $e) {
+							return sprintf('<i class="far fa-exclamation-square"></i><!-- %s -->', $path);
+						}
+					} else {
+						return 'None'; // sprintf('<i class="far fa-image"></i>');
+					}					
+				});
+				$raw_columns[] = $column;
+			} else if (in_array($field_type, ['date'])) {
+				$datatables->editColumn($column, function($object) use ($column) {				
+					return \Carbon\Carbon::parse($object->$column)->format('d/m/Y');
+				});
+			} else if (in_array($field_type, ['file'])) {
+				/**
+				 * Just return the filename, not the path
+				 * We could trim it as well, but realistically, we rarely use filenames as headers
+				 */
+				$datatables->editColumn($column, function($object) use ($column) {	
+					$path_parts = pathinfo($object->$column);		
+					return $path_parts['basename'];
+				});
+			}
+		}
+		
+		if ($raw_columns) {
+			$datatables->rawColumns($raw_columns);
 		}
 
 		return $datatables->toJson();
+	}
+
+	protected function getThumbnameUrlFromImagePath($path, $width, $height, $thumbnail_name) {
+		/**
+		 * We want to load the image, and send the URL of a thumbnail to the server
+		 * It's difficult to know exactly how the image path here relates to a physical file
+		 * but let's assume that it's stored on the local disk, if it's not a full URL
+		 */
+		if (filter_var($path, FILTER_VALIDATE_URL) === FALSE) {
+			/**
+			 * This is a path, not a URL, so get the full filepath
+			 */
+			$path = Storage::disk('local')->path($path);
+		}
+		$image     = Image::make($path)->fit($width, $height);
+		// $thumbnail = sprintf('thumbnails/%s/%s', $object->id, $column);
+		$thumbnail = sprintf('thumbnails/%s/%d/%d/image.png', $thumbnail_name, $width, $height);
+		if (!Storage::disk('ctrl')->exists($thumbnail)) {
+			Storage::disk('ctrl')->put($thumbnail, $image->stream('png'), 'public');
+		}
+		/**
+		 * I like the idea of using a temporary URL here BUT it breaks the MDB file upload plugin,
+		 * which will only render an image preview if the URL ends in .png or similar
+		 */
+		$image_url = Storage::disk('ctrl')->url(
+			$thumbnail, now()->addMinutes(5)
+		);
+		return $image_url;
 	}
 
     /**

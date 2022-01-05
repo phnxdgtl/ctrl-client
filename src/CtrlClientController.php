@@ -564,13 +564,13 @@ class CtrlClientController extends Controller
 		/**
 		 * We want to load the image, and send the URL of a thumbnail to the server
 		 * It's difficult to know exactly how the image path here relates to a physical file
-		 * but let's assume that it's stored on the local disk, if it's not a full URL
+		 * but let's assume that it's stored on the public disk, if it's not a full URL
 		 */
 		if (filter_var($path, FILTER_VALIDATE_URL) === FALSE) {
 			/**
 			 * This is a path, not a URL, so get the full filepath
 			 */
-			$path = Storage::disk('local')->path($path);
+			$path = Storage::disk('public')->path($path);
 		}
 		$image     = Image::make($path)->fit($width, $height);
 		// $thumbnail = sprintf('thumbnails/%s/%s', $object->id, $column);

@@ -530,7 +530,7 @@ class CtrlClientController extends Controller
 							$image_url = $this->getThumbnameUrlFromImagePath($path, 50, 50, $thumbnail_name);							
 							return sprintf('<img src="%s">', $image_url);
 						} catch(NotReadableException $e) {
-							return sprintf('<i class="far fa-exclamation-square"></i><!-- %s -->', $path);
+							return sprintf('<i class="far fa-exclamation-square"></i><!-- %s: %s -->', $path, $e->getMessage());
 						}
 					} else {
 						return 'None'; // sprintf('<i class="far fa-image"></i>');

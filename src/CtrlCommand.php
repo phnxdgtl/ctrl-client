@@ -134,7 +134,9 @@ class CtrlCommand extends Command
                     'url'           => str_replace('_id_', $record->id, $url_format)
                 ];
             }
-            $client->collections[$schema_name]->documents->import($documents, ['action' => 'upsert']);
+            if ($documents) {
+                $client->collections[$schema_name]->documents->import($documents, ['action' => 'upsert']);
+            }
             
         }
 

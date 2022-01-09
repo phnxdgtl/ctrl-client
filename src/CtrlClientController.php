@@ -524,16 +524,12 @@ class CtrlClientController extends Controller
 			} else if (in_array($field_type, ['image'])) {
 				$datatables->editColumn($column, function($object) use ($column) {				
 					if (config('filesystems.disks.ctrl', false)) {
-						try {		
-							$path  = $object->$column;
-							$thumbnail_name = sprintf('%s/%s', $object->id, $column);							
-							$image_url = $this->getThumbnameUrlFromImagePath($path, 50, 50, $thumbnail_name);							
-							return sprintf('<img src="%s">', $image_url);
-						} catch(NotReadableException $e) {
-							return sprintf('<i class="far fa-exclamation-square"></i><!-- %s: %s -->', $path, $e->getMessage());
-						}
+						$path  = $object->$column;
+						$thumbnail_name = sprintf('%s/%s', $object->id, $column);							
+						$image_tag = $this->getThumbnameUrlFromImagePath($path, 50, 50, $thumbnail_name, '<img src="%s">');			
+						return $image_tag;	
 					} else {
-						return 'None'; // sprintf('<i class="far fa-image"></i>');
+						return sprintf('<i class="far fa-image"></i>');
 					}					
 				});
 				$raw_columns[] = $column;
@@ -560,24 +556,51 @@ class CtrlClientController extends Controller
 		return $datatables->toJson();
 	}
 
-	protected function getThumbnameUrlFromImagePath($path, $width, $height, $thumbnail_name) {
+	protected function getThumbnameUrlFromImagePath($path, $width, $height, $thumbnail_name, $wrapper = null) {
 		/**
 		 * We want to load the image, and send the URL of a thumbnail to the server
 		 * It's difficult to know exactly how the image path here relates to a physical file
 		 * but let's assume that it's stored on the public disk, if it's not a full URL
 		 */
-		if (filter_var($path, FILTER_VALIDATE_URL) === FALSE) {
-			/**
-			 * This is a path, not a URL, so get the full filepath
-			 */
-			$path = Storage::disk('public')->path($path);
-		}
-		$image     = Image::make($path)->fit($width, $height);
-		// $thumbnail = sprintf('thumbnails/%s/%s', $object->id, $column);
-		$thumbnail = sprintf('thumbnails/%s/%d/%d/image.png', $thumbnail_name, $width, $height);
+
+		 /**
+		  * Establish a unique path for this thumbnail
+		  */
+		$domain    = parse_url(config('app.url'), PHP_URL_HOST);
+		$thumbnail = sprintf('thumbnails/%s/%s/%d/%d/%s.png', $domain, $thumbnail_name, $width, $height, md5($path));
+
+		/**
+		 * If we don't already have a thumbnail stored on the ctrl disk (ie, the thumbnail/image store), create one
+		 */
 		if (!Storage::disk('ctrl')->exists($thumbnail)) {
+
+			if (filter_var($path, FILTER_VALIDATE_URL) === FALSE) {
+				/**
+				 * This is a path, not a URL, so get the full filepath
+				 */
+				$path = Storage::disk('public')->path($path);
+			}
+			
+			try {		
+				$image     = Image::make($path)->fit($width, $height);
+			} catch(NotReadableException $e) {
+				/**
+				 * We might be in the local "packages" folder when developing locally
+				 * Usually this will be the main vendor folder though:
+				 */
+				$package_path = dirname(__FILE__);
+				if ($width > 100 || $height > 100) {				
+					$missing_image = '/assets/image-not-found.png';
+				} else {
+					$missing_image = '/assets/image-not-found-small.png';
+				}
+				$missing_image_path = $package_path.$missing_image;
+				$image              = Image::make($missing_image_path)->fit($width, $height);				
+			}
+
 			Storage::disk('ctrl')->put($thumbnail, $image->stream('png'), 'public');
 		}
+	
 		/**
 		 * I like the idea of using a temporary URL here BUT it breaks the MDB file upload plugin,
 		 * which will only render an image preview if the URL ends in .png or similar
@@ -585,7 +608,13 @@ class CtrlClientController extends Controller
 		$image_url = Storage::disk('ctrl')->url(
 			$thumbnail, now()->addMinutes(5)
 		);
-		return $image_url;
+
+		if ($wrapper) {
+			return sprintf($wrapper, $image_url);		
+		} else {
+			return $image_url;
+		}
+		
 	}
 
     /**

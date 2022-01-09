@@ -101,18 +101,16 @@ class CtrlCommand extends Command
         $schema_name = $this->getSchemaName();
 
         $this->info(sprintf("Processing schema %s", $schema_name));
-        
-        if ($this->option('fresh')) {
-            $this->info(sprintf("Deleting all documents from schema %s", $schema_name));
-            $client->collections[$schema_name]->delete();
-        }
 
-        if ($this->option('fresh') || !$this->schemaExists($client, $schema_name)) {
+        if (!$this->schemaExists($client, $schema_name)) {
             if (!$this->option('fresh')) { // Don't state the obvious!
                 $this->info(sprintf("Schema %s does not exist", $schema_name));
             }
             $this->createSchema($client, $schema_name);
             $this->info(sprintf("Schema %s created", $schema_name));
+        } else if ($this->option('fresh')) {
+            $this->info(sprintf("Deleting all documents from schema %s", $schema_name));
+            $client->collections[$schema_name]->delete();
         }
 
         [$table_name, $column, $url_format] = $this->getArgs([2, 3, 4]);

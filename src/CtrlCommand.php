@@ -108,6 +108,12 @@ class CtrlCommand extends Command
             }
             $this->createSchema($client, $schema_name);
             $this->info(sprintf("Schema %s created", $schema_name));
+
+            /**
+             * I think we need to refresh the client here, so that we're aware of the new schema?
+             */
+            $client = $this->getTypesenseClient();
+
         } else if ($this->option('fresh')) {
             $this->info(sprintf("Deleting all documents from schema %s", $schema_name));
             $client->collections[$schema_name]->delete();

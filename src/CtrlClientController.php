@@ -21,6 +21,9 @@ use Illuminate\Support\Facades\Artisan;
 
 class CtrlClientController extends Controller
 {
+
+	const VERSION = 'dev';
+
     public function test() {
 		
 		if (class_exists('\App\Models\Ctrl\Post')) {
@@ -702,6 +705,17 @@ class CtrlClientController extends Controller
 
 		return response()->json([
 			'success' => true
+		], 200);
+	}
+
+	/**
+	 * Get the version of the client library we're using
+     * @param Request $request 
+     * @return mixed 
+     */
+    public function getClientVersion(Request $request) {
+		return response()->json([
+			'version' => self::VERSION
 		], 200);
 	}
 

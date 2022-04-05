@@ -112,6 +112,7 @@ class CtrlCommand extends Command
             /**
              * I think we need to refresh the client here, so that we're aware of the new schema?
              */
+            // TODO: this doesn't work. Review this when we next create a new index...
             $client = $this->getTypesenseClient();
 
         } else if ($this->option('fresh')) {

@@ -19,4 +19,6 @@ Route::middleware(['ctrl-client'])->prefix('ctrl-client')->group(function () {
 	Route::get('get-database-structure', [CtrlClientController::class, 'getDatabaseStructure']);
 
 	Route::post('sync-search', [CtrlClientController::class, 'syncSearch']);
+
+	Route::post('get-client-version', [CtrlClientController::class, 'getClientVersion']);
 });

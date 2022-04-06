@@ -17,10 +17,6 @@ class CtrlToken
     public function handle(Request $request, Closure $next)
     {
 
-        if (app()->environment('local')) {
-            return $next($request);
-        }
-
         $key   = env('CTRL_KEY');
         $token = $request->bearerToken();
         if (!$key || $token != $key) {

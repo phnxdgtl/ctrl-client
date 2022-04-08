@@ -24,6 +24,8 @@ class CtrlClientController extends Controller
 
 	const VERSION = 'dev';
 
+	protected $filesystem_disk = null;
+
     public function test() {
 		
 		if (class_exists('\App\Models\Ctrl\Post')) {
@@ -34,6 +36,25 @@ class CtrlClientController extends Controller
 		
         return 'Hello world';
     }
+
+	/**
+     * Create a new controller instance.
+     *
+     * @return void
+     */
+    public function __construct()
+    {
+		/**
+		 * If we've defined a specific 'ctrl' disk in the filesystems config, use that.
+		 * Otherwise, use the default one:
+		 */
+		if (config()->has('filesystems.disks.ctrl')) {
+			$this->filesystem_disk = 'ctrl';
+		} else {
+			$this->filesystem_disk = config('filesystems.default');
+		}
+	}
+
 
 	/**
 	 * Return data about an object
@@ -87,8 +108,8 @@ class CtrlClientController extends Controller
 				$path                 = $object_data->$column;
 				$thumbnail_name       = sprintf('%s/%s', $object_data->id, $column);
 
-				$object_data->$column = $this->getThumbnameUrlFromImagePath($path, 1600, 200, $thumbnail_name);
-				$object_data->{$column.'_thumbnail'} = $this->getThumbnameUrlFromImagePath($path, 1600, 200, $thumbnail_name);
+				$object_data->$column = $this->getThumbnameUrlFromImagePath($path, 1200, 800, $thumbnail_name);
+				$object_data->{$column.'_thumbnail'} = $this->getThumbnameUrlFromImagePath($path, 1200, 800, $thumbnail_name);
 
 			}
 		}
@@ -526,14 +547,12 @@ class CtrlClientController extends Controller
 				});
 			} else if (in_array($field_type, ['image'])) {
 				$datatables->editColumn($column, function($object) use ($column) {				
-					if (config('filesystems.disks.ctrl', false)) {
-						$path  = $object->$column;
-						$thumbnail_name = sprintf('%s/%s', $object->id, $column);							
-						$image_tag = $this->getThumbnameUrlFromImagePath($path, 50, 50, $thumbnail_name, '<img src="%s">');			
-						return $image_tag;	
-					} else {
-						return sprintf('<i class="far fa-image"></i>');
-					}					
+					$path  = $object->$column;
+					$thumbnail_name = sprintf('%s/%s', $object->id, $column);							
+					$image_tag = $this->getThumbnameUrlFromImagePath($path, 50, 50, $thumbnail_name, '<img src="%s">');			
+					return $image_tag;	
+					// If we can't load an image we could return this, but... why wouldn't we be able to?
+					// return sprintf('<i class="far fa-image"></i>');
 				});
 				$raw_columns[] = $column;
 			} else if (in_array($field_type, ['date'])) {
@@ -564,27 +583,44 @@ class CtrlClientController extends Controller
 		 * We want to load the image, and send the URL of a thumbnail to the server
 		 * It's difficult to know exactly how the image path here relates to a physical file
 		 * but let's assume that it's stored on the public disk, if it's not a full URL
+		 * 
+		 * NO: use Storage properly. Load the image from whichever disk we're using:
 		 */
+		$thumbnail_format = 'jpg';
 
 		 /**
 		  * Establish a unique path for this thumbnail
 		  */
-		$domain    = parse_url(config('app.url'), PHP_URL_HOST);
-		$thumbnail = sprintf('thumbnails/%s/%s/%d/%d/%s.png', $domain, $thumbnail_name, $width, $height, md5($path));
-
+		$thumbnail = implode('/', [
+			'ctrl-thumbnails',
+			$thumbnail_name,
+			$width,
+			$height,
+			md5($path).'.'.$thumbnail_format,
+		]);
+		
 		/**
 		 * If we don't already have a thumbnail stored on the ctrl disk (ie, the thumbnail/image store), create one
 		 */
-		if (!Storage::disk('ctrl')->exists($thumbnail)) {
-
-			if (filter_var($path, FILTER_VALIDATE_URL) === FALSE) {
-				/**
-				 * This is a path, not a URL, so get the full filepath
-				 */
-				$path = Storage::disk('public')->path($path);
+		if (!Storage::disk($this->filesystem_disk)->exists($thumbnail)) {
+			Log::debug("no thumbnail");
+			Log::debug("Path is ", [$path]);
+			
+			/**
+			 * If we're using a remote disk, and working with a path (as opposed to a URL), then we need to
+			 * generate the full URL so that Intervention can generate the thumbnail:
+			 */
+			if (
+				filter_var($path, FILTER_VALIDATE_URL) === FALSE
+				&&
+				config(sprintf('filesystems.disks.%s.driver', $this->filesystem_disk)) != 'local')
+			{				
+				$path = Storage::disk($this->filesystem_disk)->url($path);
+				Log::debug("Path is now ", [$path]);
 			}
 			
-			try {		
+			try {	
+				Log::debug("Trying to load $path");	
 				$image     = Image::make($path)->fit($width, $height);
 			} catch(NotReadableException $e) {
 				/**
@@ -598,17 +634,24 @@ class CtrlClientController extends Controller
 					$missing_image = '/assets/image-not-found-small.png';
 				}
 				$missing_image_path = $package_path.$missing_image;
-				$image              = Image::make($missing_image_path)->fit($width, $height);				
+				$image              = Image::make($missing_image_path)->fit($width, $height);
+				$thumbnail = implode('/', [
+					'ctrl-thumbnails',
+					$thumbnail_name,
+					$width,
+					$height,
+					'ctrl-image-missing.png',
+				]);
 			}
 
-			Storage::disk('ctrl')->put($thumbnail, $image->stream('png'), 'public');
+			Storage::disk($this->filesystem_disk)->put($thumbnail, $image->stream($thumbnail_format, 60), 'public');
 		}
 	
 		/**
 		 * I like the idea of using a temporary URL here BUT it breaks the MDB file upload plugin,
 		 * which will only render an image preview if the URL ends in .png or similar
 		 */
-		$image_url = Storage::disk('ctrl')->url(
+		$image_url = Storage::disk($this->filesystem_disk)->url(
 			$thumbnail, now()->addMinutes(5)
 		);
 
@@ -669,13 +712,14 @@ class CtrlClientController extends Controller
 	 * Trigger a sync to Typesense via an Artisan command (so that we can queue it)
 	 * @return void 
 	 */
-	public function syncSearch(Request $request) {
+	public function buildTypesenseIndex(Request $request) {
 
 		$validator = Validator::make($request->all(), [
 			'ctrl_fresh'      => 'nullable',
 			'ctrl_table_name' => 'required',
 			'ctrl_column'     => 'required',
 			'ctrl_url_format' => 'required',
+			'ctrl_schema'     => 'required',
 		]);
 
 		if ($validator->fails()) {
@@ -694,11 +738,14 @@ class CtrlClientController extends Controller
 		}
 
 		$parameters = [
-			'args' => ['search', $table_name, $column, $url_format]
+			'args' => ['index', $table_name, $column, $url_format]
 		];
 
 		if ($fresh) {
 			$parameters['--fresh'] = true;
+		}
+		if ($schema) {
+			$parameters['--schema'] = $schema;
 		}
 
 		Artisan::queue('ctrl', $parameters);

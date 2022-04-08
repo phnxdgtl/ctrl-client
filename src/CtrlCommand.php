@@ -18,7 +18,11 @@ class CtrlCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'ctrl {args?*} {--fresh}';
+    protected $signature = 'ctrl {args?*}
+                            {--schema=? : The schema name used by Typesense}
+                            {--fresh}';
+
+    // Move these into individual functions, having one global one is a bad ide
 
     /**
      * The console command description.
@@ -77,8 +81,8 @@ class CtrlCommand extends Command
 
         $command = $this->getArgs(1);
         switch ($command) {
-            case 'search':
-                $this->search();
+            case 'index':
+                $this->buildTypesenseIndex();
                 break;
             case 'images':
                 $this->imagesToS3();
@@ -93,12 +97,17 @@ class CtrlCommand extends Command
      * Some search functions... probably just to sync data to Typesense, TBC
      * @return void 
      */
-    protected function search() {
+    protected function buildTypesenseIndex() {
         /**
          * This assumes that we're using Typesense Cloud
          */
         $client      = $this->getTypesenseClient();
-        $schema_name = $this->getSchemaName();
+        $schema_name = $this->option('schema');
+
+        if (!$schema_name) {
+            $this->error("You need to specify a schema name when running this command manually. This correct schema is sent automatically when triggering an index from the server");
+            exit();
+        }
 
         $this->info(sprintf("Processing schema %s", $schema_name));
 
@@ -179,17 +188,6 @@ class CtrlCommand extends Command
             ]
         );
         return $client;
-    }
-
-    protected function getSchemaName() {
-     
-        $schema_name = request()->getHttpHost();
-
-        if (!$schema_name) {
-            $this->error("Cannot generate schema name from URL");
-            exit();
-        }
-        return $schema_name;
     }
 
     protected function schemaExists($client, $schema_name) {

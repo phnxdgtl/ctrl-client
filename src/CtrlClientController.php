@@ -91,7 +91,12 @@ class CtrlClientController extends Controller
 		 * Only select the required headers, for speed;
 		 * we may not want to do this when loading an eloquent model?
 		 */
-		$select = array_keys($object_properties);
+
+		 /**
+		  * array_filter here filters out any properties without a "column";
+		  * -- but will this mean that we can't edit many-to-many relationships?
+		  */
+		$select = array_filter(array_keys($object_properties));
 
 		$model = $this->getModelNameFromTableName($input['table_name']);
 		if (class_exists($model)) {		

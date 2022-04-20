@@ -299,7 +299,7 @@ class CtrlClientController extends Controller
 			$data = DB::table($source_table)						
 						->join($join_table, "$join_table.$foreign_key", '=', "$source_table.$parent_key")
 						->join($table_name, "$join_table.$local_key", '=', "$table_name.$related_key")
-						->where($local_key, $object_id)
+						->where("$join_table.$local_key", $object_id)
 						->pluck("$source_table.$source_label", "$source_table.$related_key");
 		} else {
 			$data = DB::table($source_table)->where($foreign_key, $object_id)->pluck($source_label, $local_key);

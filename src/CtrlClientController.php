@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Typesense\Client as TypesenseClient;
 
 use Yajra\DataTables\DataTables;
 
@@ -705,8 +706,6 @@ class CtrlClientController extends Controller
 							SHOW COLUMNS
 							FROM {$table_name}
 							WHERE Field != 'id'
-							AND Field != 'updated_at'
-							AND Field != 'created_at'
 						"); 
 			$data[$table_name] = $columns;
 		}
@@ -717,13 +716,14 @@ class CtrlClientController extends Controller
 	 * Trigger a sync to Typesense via an Artisan command (so that we can queue it)
 	 * @return void 
 	 */
-	public function buildTypesenseIndex(Request $request) {
+	public function __buildTypesenseIndex(Request $request) {
 
 		$validator = Validator::make($request->all(), [
 			'ctrl_fresh'      => 'nullable',
-			'ctrl_table_name' => 'required',
-			'ctrl_column'     => 'required',
-			'ctrl_url_format' => 'required',
+			'ctrl_title'      => 'nullable',
+			'ctrl_table_name' => 'nullable',
+			'ctrl_column'     => 'nullable',
+			'ctrl_url'        => 'nullable',
 			'ctrl_schema'     => 'required',
 		]);
 
@@ -731,34 +731,189 @@ class CtrlClientController extends Controller
 			return response()->json($validator->errors(), 404);
 		}
 
-		$data = $validator->validated();
-
-		/**
-		 * Extract variables, removing the _ctrl prefix
-		 * I'm not sure whether using the prefix is really necessary TBH
-		 * TODO: move this validation stuff (and the extract code) into a function
-		 */
-		foreach ($data as $variable=>$value) {
-			${str_replace('ctrl_', '', $variable)} = $value;
-		}
-
 		$parameters = [
-			'args' => ['index', $table_name, $column, $url_format]
+			'--schema'     => $request->input('ctrl_schema'),
+			'--title'      => $request->input('ctrl_title'),
+			'--table_name' => $request->input('ctrl_table_name'),
+			'--column'     => $request->input('ctrl_column'),
+			'--url'        => $request->input('ctrl_url'),			
 		];
-
-		if ($fresh) {
+		if ($request->input('ctrl_fresh')) {
 			$parameters['--fresh'] = true;
 		}
-		if ($schema) {
-			$parameters['--schema'] = $schema;
-		}
+		Log::debug($parameters);
 
-		Artisan::queue('ctrl', $parameters);
+		Artisan::queue('ctrl:index', $parameters);
 
 		return response()->json([
 			'success' => true
 		], 200);
 	}
+
+	/**
+	 * Trigger a sync to Typesense, lifted from a previous artisan command
+	 * @return void 
+	 */
+    protected function buildTypesenseIndex(Request $request) {
+        
+		$validator = Validator::make($request->all(), [
+			'ctrl_fresh'      => 'nullable',
+			'ctrl_title'      => 'nullable',
+			'ctrl_table_name' => 'nullable',
+			'ctrl_column'     => 'nullable',
+			'ctrl_url'        => 'nullable',
+			'ctrl_schema'     => 'required',
+		]);
+
+		if ($validator->fails()) {
+			return response()->json($validator->errors(), 404);
+		}
+
+		$schema_name = $request->input('ctrl_schema');
+		$title       = $request->input('ctrl_title');
+		$table_name  = $request->input('ctrl_table_name');
+		$column      = $request->input('ctrl_column');
+		$url         = $request->input('ctrl_url');
+		$fresh       = $request->input('ctrl_fresh');
+
+        if (!$schema_name) {
+            trigger_error("You need to specify a schema name when running this command manually. This correct schema is sent automatically when triggering an index from the server");
+        }
+
+        if (
+            (
+                (
+                    (!$table_name || !$column)
+                    &&
+                    !$title
+                )
+                || !$url
+            )
+            && !$fresh
+        ) {
+            trigger_error("We need to specify the title of the item (or, a table_name and column), plus a url, unless we're wiping the current index via --fresh");
+            exit();
+        }
+
+        Log::info(sprintf("Processing schema %s", $schema_name));
+
+		$client      = $this->getTypesenseClient();
+
+        if (!$this->schemaExists($client, $schema_name)) {
+            if (!$fresh) { // Don't state the obvious!
+                Log::info(sprintf("Schema %s does not exist", $schema_name));
+            }
+            $this->createSchema($client, $schema_name);
+            Log::info(sprintf("Schema %s created", $schema_name));
+
+            /**
+             * I think we need to refresh the client here, so that we're aware of the new schema?
+             */
+            // TODO: this doesn't work. Review this when we next create a new index...
+            $client = $this->getTypesenseClient();
+
+        } else if ($fresh) {  
+            Log::debug(sprintf("DELETING SCHEMA NAME %s as --fresh is set to %s", $schema_name, $fresh));          
+            $client->collections[$schema_name]->delete();
+            Log::info(sprintf("All documents from schema %s have been deleted", $schema_name));
+            return response()->json([
+				'success' => true
+			], 200);
+        }
+        
+        /**
+         * If we're just adding a fixed item to the index from the Ctrl Server (eg, a link to a list of Things)
+         * then add it here. Otherwise, we use table_name and column to pull actual data from the database
+         */
+        $documents = [];
+        if ($title) {
+            $log = sprintf("Adding record with title %s. URL format is %s", $title, $url);
+            $documents[] = [
+                'id'            => sprintf('%s', Str::slug($title)),
+                'title'         => $title,
+                'url'           => $url
+            ];
+        } else {
+
+            $log = sprintf("Pulling column %s from table %s. URL format is %s", $table_name, $column, $url);
+            
+            $records = DB::table($table_name)->select('id', $column)->get();
+
+            if (count($records) > 0) {
+                foreach ($records as $record) {
+                    $documents[] = [
+                        'id'            => sprintf('%s-%s', $table_name, $record->id),
+                        'title'         => $record->$column,
+                        'url'           => str_replace('_id_', $record->id, $url)
+                    ];
+                }                            
+            }
+        }
+        Log::debug($log);
+        if ($documents) {
+            $client->collections[$schema_name]->documents->import($documents, ['action' => 'upsert']);
+        }
+
+        Log::info("Search indexed");
+		return response()->json([
+			'success' => true
+		], 200);
+
+    }
+
+    protected function getTypesenseClient() {
+        $host   = env('TYPESENSE_HOST', false);
+        $key    = env('TYPESENSE_KEY', false);
+
+        if (!$host || !$key) {
+            if (!$host) {
+                trigger_error("No TYPESENSE_HOST found in .env");
+            }
+            if (!$key) {
+                trigger_error("No TYPESENSE_KEY found in .env");
+            }            
+            exit();
+        }
+
+        $client = new TypesenseClient(
+            [
+              'api_key'         => $key,
+              'nodes'           => [
+                [
+                  'host'     => $host,
+                  'port'     => '443',
+                  'protocol' => 'https',
+                ],
+              ],
+              'connection_timeout_seconds' => 2,
+            ]
+        );
+        return $client;
+    }
+
+    protected function schemaExists($client, $schema_name) {
+        try {
+            $client->collections[$schema_name]->retrieve();
+        } catch (\Typesense\Exceptions\ObjectNotFound $e) {
+            return false;
+        } catch (\Exception $e) {
+            trigger_error(sprintf("Error connecting to Typesense: %s", $e->getMessage()));
+            exit();
+        }
+        return true;
+    }
+
+    protected function createSchema($client, $schema_name) {
+        $schema = [
+            'name' => $schema_name,
+            'fields' => [
+              ['name' => 'id',      'type' => 'string'],
+              ['name' => 'title',   'type' => 'string'],
+              ['name' => 'url',     'type' => 'string'],
+            ]
+        ];          
+        $client->collections->create($schema);
+    }
 
 	/**
 	 * Get the version of the client library we're using

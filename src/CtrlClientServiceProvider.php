@@ -28,9 +28,12 @@ class CtrlClientServiceProvider extends ServiceProvider
     public function boot()
     {
 
+        /**
+         * We don't currently have any Artisan commands:
         $this->commands([
             CtrlCommand::class,
         ]);
+        **/
 
         include __DIR__.'/routes.php';
         $this->loadViewsFrom(__DIR__.'/views', 'ctrl');

@@ -30,6 +30,10 @@ In the short-term, we've added these lines to `composer.json` for the Client
 "maatwebsite/excel": "^3.1",
 ```
 
+This also requires the `--with-all-dependencies` option, as follows:
+
+`composer require phnxdgtl/ctrl-client -W`
+
 These should be removed once Laravel Datatables is updated to fully support Laravel 9.
 
 ##S3 buckets
@@ -80,4 +84,10 @@ TYPESENSE_KEY=kUp6Gg9CEzlR0dsdGxx87rMf1yJNYxVM
 
 ##Setting up the site in CTRL
 
-Log into the CTRL Server, and add the site. That's it.
+Log into the CTRL Server, and add the site.
+
+You should then copy the API Key to `.env`, as follows:
+
+`\CTRL_KEY=********`
+
+That's it.

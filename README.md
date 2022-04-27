@@ -15,7 +15,22 @@ Add this code to your `composer.json` file:
 
 You can then install the libraries via:
 
-`composer install phnxdgtl/ctrl-client`
+`composer require phnxdgtl/ctrl-client`
+
+###Note
+
+We have an installation issue with Laravel Datatables in Laravel 9, as described here:
+
+(https://github.com/yajra/laravel-datatables-buttons/issues/143)[https://github.com/yajra/laravel-datatables-buttons/issues/143]
+
+In the short-term, we've added these lines to `composer.json` for the Client
+
+```
+"psr/simple-cache": "^1.0",
+"maatwebsite/excel": "^3.1",
+```
+
+These should be removed once Laravel Datatables is updated to fully support Laravel 9.
 
 ##S3 buckets
 

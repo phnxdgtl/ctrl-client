@@ -592,95 +592,67 @@ class CtrlClientController extends Controller
 		 * 
 		 * NO: use Storage properly. Load the image from whichever disk we're using:
 		 */
+		
+		if (!$path) {
+			return false;
+		}
 
 		$thumbnail_format = 'jpg';
-
-		/**
-		* If we don't have an image to display, render a generic "Image" image
-		* This needs work :: we need a tiled image, for example
-		*/
-
-		/**
-		 * We might be in the local "packages" folder when developing locally
-		 * Usually we'll load empty/missing images from the main vendor folder though:
-		 */
-		$package_path = dirname(__FILE__);
-
-		if (!$path) {
-			$thumbnail = implode('/', [
-				'ctrl-thumbnails',
-				$thumbnail_name,
-				$width,
-				$height,
-				'ctrl-image-empty.png',
-			]);
-			
-			/** We'll need a tiled version:
-			if ($width > 100 || $height > 100) {				
-				$missing_image = '/assets/image-not-found.png';
-			} else {
-				$missing_image = '/assets/image-not-found-small.png';
-			}
-			*/
-			$empty_image      = '/assets/image-empty.png';
-			$empty_image_path = $package_path.$empty_image;
-			$image            = Image::make($empty_image_path)->fit($width, $height);
-		} else {
-			/**
-			 * Establish a unique path for this thumbnail
-			*/
-			$thumbnail = implode('/', [
-				'ctrl-thumbnails',
-				$thumbnail_name,
-				$width,
-				$height,
-				md5($path).'.'.$thumbnail_format,
-			]);			
-			
-			/**
-			 * If we don't already have a thumbnail stored on the ctrl disk (ie, the thumbnail/image store), create one
-			 */
-			if (!Storage::disk($this->filesystem_disk)->exists($thumbnail)) {
-				Log::debug("Thumbnail not found. Path is ", [$path]);
 				
-				if (!$path) {
-					
-					Log::debug("Loading empty image from ".$empty_image_path);
+		/**
+		 * Establish a unique path for this thumbnail
+		*/
+		$thumbnail = implode('/', [
+			'ctrl-thumbnails',
+			$thumbnail_name,
+			$width,
+			$height,
+			md5($path).'.'.$thumbnail_format,
+		]);			
+			
+		/**
+		 * If we don't already have a thumbnail stored on the ctrl disk (ie, the thumbnail/image store), create one
+		 */
+		if (!Storage::disk($this->filesystem_disk)->exists($thumbnail)) {
+			Log::debug("no thumbnail");
+			Log::debug("Path is ", [$path]);			
+		
+			/**
+			 * If we're using a remote disk, and working with a path (as opposed to a URL), then we need to
+			 * generate the full URL so that Intervention can generate the thumbnail:
+			 */
+			if (
+				filter_var($path, FILTER_VALIDATE_URL) === FALSE
+				&&
+				config(sprintf('filesystems.disks.%s.driver', $this->filesystem_disk)) != 'local')
+			{				
+				$path = Storage::disk($this->filesystem_disk)->url($path);
+				Log::debug("Path is now ", [$path]);
+			}
+			
+			try {	
+				Log::debug("Trying to load $path");	
+				$image     = Image::make($path)->fit($width, $height);
+			} catch(NotReadableException $e) {
+				/**
+				 * We might be in the local "packages" folder when developing locally
+				 * Usually this will be the main vendor folder though:
+				 */
+				$package_path = dirname(__FILE__);
+				if ($width > 100 || $height > 100) {				
+					$missing_image = '/assets/image-not-found.png';
 				} else {
-
-					/**
-					 * If we're using a remote disk, and working with a path (as opposed to a URL), then we need to
-					 * generate the full URL so that Intervention can generate the thumbnail:
-					 */
-					if (
-						filter_var($path, FILTER_VALIDATE_URL) === FALSE
-						&&
-						config(sprintf('filesystems.disks.%s.driver', $this->filesystem_disk)) != 'local')
-					{				
-						$path = Storage::disk($this->filesystem_disk)->url($path);
-						Log::debug("Path is now ", [$path]);
-					}
-					
-					try {	
-						Log::debug("Trying to load $path");	
-						$image     = Image::make($path)->fit($width, $height);
-					} catch(NotReadableException $e) {			
-						if ($width > 100 || $height > 100) {				
-							$missing_image = '/assets/image-not-found.png';
-						} else {
-							$missing_image = '/assets/image-not-found-small.png';
-						}
-						$missing_image_path = $package_path.$missing_image;
-						$image              = Image::make($missing_image_path)->fit($width, $height);
-						$thumbnail = implode('/', [
-							'ctrl-thumbnails',
-							$thumbnail_name,
-							$width,
-							$height,
-							'ctrl-image-missing.png',
-						]);
-					}
+					$missing_image = '/assets/image-not-found-small.png';
 				}
+				$missing_image_path = $package_path.$missing_image;
+				$image              = Image::make($missing_image_path)->fit($width, $height);
+				$thumbnail = implode('/', [
+					'ctrl-thumbnails',
+					$thumbnail_name,
+					$width,
+					$height,
+					'ctrl-image-missing.png',
+				]);
 			}
 
 			Storage::disk($this->filesystem_disk)->put($thumbnail, $image->stream($thumbnail_format, 60), 'public');

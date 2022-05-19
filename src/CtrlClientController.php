@@ -115,6 +115,9 @@ class CtrlClientController extends Controller
 				$thumbnail_name       = sprintf('%s/%s', $object_data->id, $column);
 
 				$object_data->$column = $this->getThumbnameUrlFromImagePath($path, 1200, 800, $thumbnail_name);
+				/**
+				 * I can't for the life of me remember why/where/if we use this _thumbnail value
+				 */
 				$object_data->{$column.'_thumbnail'} = $this->getThumbnameUrlFromImagePath($path, 1200, 800, $thumbnail_name);
 
 			}
@@ -776,6 +779,7 @@ class CtrlClientController extends Controller
 
 		$schema_name = $request->input('ctrl_schema');
 		$title       = $request->input('ctrl_title');
+		$taxonomy    = $request->input('ctrl_taxonomy');
 		$table_name  = $request->input('ctrl_table_name');
 		$column      = $request->input('ctrl_column');
 		$url         = $request->input('ctrl_url');
@@ -834,9 +838,10 @@ class CtrlClientController extends Controller
         if ($title) {
             $log = sprintf("Adding record with title %s. URL format is %s", $title, $url);
             $documents[] = [
-                'id'            => sprintf('%s', Str::slug($title)),
-                'title'         => $title,
-                'url'           => $url
+                'id'       => sprintf('%s', Str::slug($title)),
+                'title'    => $title,
+                'taxonomy' => $taxonomy,
+                'url'      => $url
             ];
         } else {
 
@@ -847,9 +852,10 @@ class CtrlClientController extends Controller
             if (count($records) > 0) {
                 foreach ($records as $record) {
                     $documents[] = [
-                        'id'            => sprintf('%s-%s', $table_name, $record->id),
-                        'title'         => $record->$column,
-                        'url'           => str_replace('_id_', $record->id, $url)
+                        'id'       => sprintf('%s-%s', $table_name, $record->id),
+                        'title'    => $record->$column,
+                        'taxonomy' => $taxonomy,
+                        'url'      => str_replace('_id_', $record->id, $url)
                     ];
                 }                            
             }

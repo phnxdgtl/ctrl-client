@@ -12,6 +12,7 @@ Route::middleware(['ctrl-client'])->prefix('ctrl-client')->group(function () {
 	Route::any('put-object-data', [CtrlClientController::class, 'putObjectData']);
 	Route::any('delete-object', [CtrlClientController::class, 'deleteObject']);
 
+	Route::any('export-data', [CtrlClientController::class, 'exportData']);
 
 	Route::any('get-possible-values', [CtrlClientController::class, 'getPossibleValues']);
 	Route::any('get-related-values', [CtrlClientController::class, 'getRelatedValues']);

@@ -1,5 +1,6 @@
 {
     "name": "phnxdgtl/ctrl-client",
+    "description": "A collection of client APIs for use with the CTRL CMS",
     "autoload": {
         "psr-4": {
             "Phnxdgtl\\CtrlClient\\": "src"

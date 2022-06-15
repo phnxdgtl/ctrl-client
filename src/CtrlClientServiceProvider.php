@@ -6,7 +6,7 @@ use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 
 use Phnxdgtl\CtrlClient\CtrlToken;
-use Phnxdgtl\CtrlClient\CtrlCommand;
+use Phnxdgtl\CtrlClient\CtrlImportExport;
 
 class CtrlClientServiceProvider extends ServiceProvider
 {
@@ -28,12 +28,9 @@ class CtrlClientServiceProvider extends ServiceProvider
     public function boot()
     {
 
-        /**
-         * We don't currently have any Artisan commands:
         $this->commands([
-            CtrlCommand::class,
+            CtrlImportExport::class,
         ]);
-        **/
 
         include __DIR__.'/routes.php';
         $this->loadViewsFrom(__DIR__.'/views', 'ctrl');

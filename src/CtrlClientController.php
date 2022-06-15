@@ -47,7 +47,10 @@ class CtrlClientController extends Controller
     {
 		/**
 		 * If we've defined a specific 'ctrl' disk in the filesystems config, use that.
-		 * Otherwise, use the default one:
+		 * Otherwise, use the default one. 
+		 * This allows us to separate out files managed by CTRL (such as images)
+		 * from other files that might be used by the site.
+		 * This could include existing local images, from before CTRL was used.
 		 */
 		if (config()->has('filesystems.disks.ctrl')) {
 			$this->filesystem_disk = 'ctrl';
@@ -182,7 +185,7 @@ class CtrlClientController extends Controller
 
 		$validator = Validator::make($request->all(), [
 			'ctrl_table_name'   => 'required',
-			'ctrl_field'        => 'required',
+			'ctrl_field'        => 'required', // Do we even use this? I don't believe so
 			'ctrl_source_table' => 'required',
 			'ctrl_source_value' => 'required',
 			'ctrl_source_label' => 'required',
@@ -248,7 +251,7 @@ class CtrlClientController extends Controller
 		
 		$validator = Validator::make($request->all(), [
 			'ctrl_table_name'   => 'required',
-			'ctrl_field'        => 'required',
+			'ctrl_field'        => 'required', // Do we even use this? I don't believe so
 			'ctrl_source_table' => 'required',
 			'ctrl_source_value' => 'required',
 			'ctrl_source_label' => 'required',
@@ -322,7 +325,7 @@ class CtrlClientController extends Controller
 
 		$validator = Validator::make($request->all(), [
 			'ctrl_table_name'   => 'required',
-			'ctrl_field'        => 'required',
+			'ctrl_field'        => 'required', // Do we even use this? I don't believe so
 			'ctrl_source_table' => 'required',
 			'ctrl_source_value' => 'required',
 			'ctrl_source_label' => 'nullable',
@@ -488,7 +491,9 @@ class CtrlClientController extends Controller
 		/**
 		 * table_headers here is an array of column_name=>field_type pairs
 		 **/		
-		$table_headers = array_merge($request->input('ctrl_table_headers') ?? [], ['id'=>'number']);
+		$table_headers = array_merge($request->input('ctrl_table_headers') ?? [], [
+			'id'=>['field_type'=>'number']
+		]);
 
 		$filters = $request->input('ctrl_filters');
 		/**
@@ -549,11 +554,32 @@ class CtrlClientController extends Controller
 		 * Also allow us to render HTML in some columns; see https://yajrabox.com/docs/laravel-datatables/master/xss#raw	
 		 */
 		$raw_columns = [];
-		foreach ($table_headers as $column=>$field_type) {
-			if (in_array($field_type, ['text', 'textarea', 'wysiwyg'])) {
+		foreach ($table_headers as $column=>$column_data) {
+			$field_type = $column_data['field_type'];
+			
+			if (!empty($column_data['source_table'])) {
+				/**
+				 * This indicates that this is a relationship, so pull the related value
+				 */	
+				$datatables->editColumn($column, function($object) use ($column_data) {				
+					$source_table  = $column_data['source_table'];
+					$source_column = $column_data['source_column'];
+					$foreign_key   = $column_data['foreign_key'];
+					$local_key     = $column_data['local_key'];
+					return DB::table($source_table)
+								->where($foreign_key, $object->$local_key)
+								->value($source_column);
+				});
+			}
+			else if (in_array($field_type, ['text', 'textarea', 'wysiwyg'])) {
 				$datatables->editColumn($column, function($object) use ($column) {				
 					return Str::words(html_entity_decode(strip_tags($object->$column)), 15, '...');	    		
 				});
+			} else if (in_array($field_type, ['checkbox'])) {
+				$datatables->editColumn($column, function($object) use ($column) {				
+					return sprintf('<i class="fa-regular fa-lg fa-square%s"></i>', !empty($object->$column) ? '-check' : '');
+				});
+				$raw_columns[] = $column;
 			} else if (in_array($field_type, ['image'])) {
 				$datatables->editColumn($column, function($object) use ($column) {				
 					$path  = $object->$column;
@@ -720,44 +746,7 @@ class CtrlClientController extends Controller
 		return response()->json($data, 200);
 	}
 
-	/**
-	 * Trigger a sync to Typesense via an Artisan command (so that we can queue it)
-	 * @return void 
-	 */
-	public function __buildTypesenseIndex(Request $request) {
-
-		$validator = Validator::make($request->all(), [
-			'ctrl_fresh'      => 'nullable',
-			'ctrl_title'      => 'nullable',
-			'ctrl_table_name' => 'nullable',
-			'ctrl_column'     => 'nullable',
-			'ctrl_url'        => 'nullable',
-			'ctrl_schema'     => 'required',
-		]);
-
-		if ($validator->fails()) {
-			return response()->json($validator->errors(), 404);
-		}
-
-		$parameters = [
-			'--schema'     => $request->input('ctrl_schema'),
-			'--title'      => $request->input('ctrl_title'),
-			'--table_name' => $request->input('ctrl_table_name'),
-			'--column'     => $request->input('ctrl_column'),
-			'--url'        => $request->input('ctrl_url'),			
-		];
-		if ($request->input('ctrl_fresh')) {
-			$parameters['--fresh'] = true;
-		}
-		Log::debug($parameters);
-
-		Artisan::queue('ctrl:index', $parameters);
-
-		return response()->json([
-			'success' => true
-		], 200);
-	}
-
+	
 	/**
 	 * Trigger a sync to Typesense, lifted from a previous artisan command
 	 * @return void 
@@ -935,6 +924,37 @@ class CtrlClientController extends Controller
 		return response()->json([
 			'version' => self::VERSION
 		], 200);
+	}
+
+	/**
+	 * Trigger a call to the Artisan command that will generate an export file and save it to the Storage disk
+	 * @return void 
+	 */
+	public function exportData(Request $request) {
+		$input = $this->validateRequest($request, [
+			'ctrl_table_name'        => 'required',
+			'ctrl_file_name'         => 'required',
+		]);
+
+		/**
+		 * If we have validation_errors, return them as a response
+		 * It's annoying to have to do this here, but we need to return a response, which
+		 * we obviously can't do from within the validateRequest function
+		 */
+		if (!empty($input['validation_errors'])) {
+			return response()->json($input['validation_errors'], 404);
+		}
+
+		Artisan::queue('ctrl:csv', [
+			'direction'  => 'export',
+			'table_name' => $input['table_name'],
+			'file_name'  => $input['file_name'],
+		]);
+		
+		return response()->json([
+			'success' => true
+		], 200);
+
 	}
 
 }

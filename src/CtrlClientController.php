@@ -254,7 +254,7 @@ class CtrlClientController extends Controller
 		
 		$validator = Validator::make($request->all(), [
 			'ctrl_table_name'   => 'required',
-			'ctrl_field'        => 'required', // Do we even use this? I don't believe so
+			// 'ctrl_field'        => 'required', // Do we even use this? I don't believe so
 			'ctrl_source_table' => 'required',
 			'ctrl_source_value' => 'required',
 			'ctrl_source_label' => 'required',

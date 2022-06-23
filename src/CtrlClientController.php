@@ -409,12 +409,25 @@ class CtrlClientController extends Controller
 		$data       = $request->input('ctrl_data');
 
 		/**
-		 * Convert any null values to '', to prevent MySQL insertion errors when a field can't be null
-		 * This may break relationship inserts? TBC
+		 * If a field can't be null, convert any null values to '' or zero
 		 */
-		array_walk($data, function(&$item) {
+		array_walk($data, function(&$item, $key) use ($table_name) {
 			if (is_null($item)) {
-				$item = '';
+				$columns = DB::select("
+								SELECT IS_NULLABLE, NUMERIC_PRECISION
+								FROM INFORMATION_SCHEMA.COLUMNS
+								WHERE TABLE_NAME = '{$table_name}'
+								AND COLUMN_NAME = '{$key}'
+							");
+				$is_nullable = $columns[0]->IS_NULLABLE ?? false;
+				$is_numeric  = $columns[0]->NUMERIC_PRECISION ?? false;
+				if ($is_nullable != 'YES') {
+					if ($is_numeric) {
+						$item = 0;
+					} else {
+						$item = '';
+					}					
+				}
 			}
 		});
 

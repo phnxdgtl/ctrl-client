@@ -117,9 +117,12 @@ class CtrlClientController extends Controller
 				$path                 = $object_data->$column;
 				$thumbnail_name       = sprintf('%s/%s', $object_data->id, $column);
 
-				$object_data->$column = $this->getThumbnameUrlFromImagePath($path, 1200, 800, $thumbnail_name);
 				/**
-				 * I can't for the life of me remember why/where/if we use this _thumbnail value
+				 * Don't set this, as we end up overwriting an image path, with a full URL
+				 */
+				// $object_data->$column = $this->getThumbnameUrlFromImagePath($path, 1200, 800, $thumbnail_name);
+				/**
+				 * Instead, generate a specific thumbnail value for the image preview:
 				 */
 				$object_data->{$column.'_thumbnail'} = $this->getThumbnameUrlFromImagePath($path, 1200, 800, $thumbnail_name);
 
@@ -185,7 +188,7 @@ class CtrlClientController extends Controller
 
 		$validator = Validator::make($request->all(), [
 			'ctrl_table_name'   => 'required',
-			'ctrl_field'        => 'required', // Do we even use this? I don't believe so
+			// 'ctrl_field'        => 'required', // Do we even use this? I don't believe so
 			'ctrl_source_table' => 'required',
 			'ctrl_source_value' => 'required',
 			'ctrl_source_label' => 'required',
@@ -325,7 +328,7 @@ class CtrlClientController extends Controller
 
 		$validator = Validator::make($request->all(), [
 			'ctrl_table_name'   => 'required',
-			'ctrl_field'        => 'required', // Do we even use this? I don't believe so
+			// 'ctrl_field'        => 'required', // Do we even use this? I don't believe so
 			'ctrl_source_table' => 'required',
 			'ctrl_source_value' => 'required',
 			'ctrl_source_label' => 'nullable',

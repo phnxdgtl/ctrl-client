@@ -79,7 +79,7 @@ class CtrlClientController extends Controller
 		 * we obviously can't do from within the validateRequest function
 		 */
 		if (!empty($input['validation_errors'])) {
-			return response()->json($input['validation_errors'], 404);
+			return response()->json($input['validation_errors'], 422);
 		}
 
 		/**
@@ -198,7 +198,7 @@ class CtrlClientController extends Controller
 		]);
 
 		if ($validator->fails()) {
-			return response()->json($validator->errors(), 404);
+			return response()->json($validator->errors(), 422);
 		}
 
 		$data = $validator->validated();
@@ -269,7 +269,7 @@ class CtrlClientController extends Controller
 		]);
 
 		if ($validator->fails()) {
-			return response()->json($validator->errors(), 404);
+			return response()->json($validator->errors(), 422);
 		}
 
 		$data = $validator->validated();
@@ -342,7 +342,7 @@ class CtrlClientController extends Controller
 		]);
 
 		if ($validator->fails()) {
-			return response()->json($validator->errors(), 404);
+			return response()->json($validator->errors(), 422);
 		}
 
 		$data = $validator->validated();
@@ -779,7 +779,7 @@ class CtrlClientController extends Controller
 		]);
 
 		if ($validator->fails()) {
-			return response()->json($validator->errors(), 404);
+			return response()->json($validator->errors(), 422);
 		}
 
 		$schema_name = $request->input('ctrl_schema');
@@ -958,7 +958,7 @@ class CtrlClientController extends Controller
 		 * we obviously can't do from within the validateRequest function
 		 */
 		if (!empty($input['validation_errors'])) {
-			return response()->json($input['validation_errors'], 404);
+			return response()->json($input['validation_errors'], 422);
 		}
 
 		Artisan::queue('ctrl:csv', [

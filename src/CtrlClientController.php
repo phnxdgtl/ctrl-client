@@ -340,7 +340,7 @@ class CtrlClientController extends Controller
 			'ctrl_parent_key'   => 'nullable',
 			'ctrl_related_key'  => 'nullable',
 			'ctrl_object_id'    => 'required',
-			'ctrl_values'		=> 'required'
+			'ctrl_values'		=> 'nullable'
 		]);
 
 		if ($validator->fails()) {

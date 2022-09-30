@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Log;
 use Typesense\Client as TypesenseClient;
 
 use Yajra\DataTables\DataTables;
+// Need this facade to use ::eloquent(), but that doesn't work for Query Builder (which is what we mainly use)
+// use Yajra\DataTables\Facades\DataTables;
 
 use Intervention\Image\Facades\Image;
 use Intervention\Image\Exception\NotReadableException;
@@ -61,7 +63,7 @@ class CtrlClientController extends Controller
 
 
 	/**
-	 * Return data about an object
+	 * Return data about a single object
      * @param Request $request 
      * @return mixed 
      */
@@ -497,7 +499,7 @@ class CtrlClientController extends Controller
 
 
     /**
-	 * Return data in a Datatables format
+	 * Return data about multiple objects, in a Datatables format
      * @param Request $request 
      * @return mixed 
      */
@@ -518,7 +520,7 @@ class CtrlClientController extends Controller
 		 * If we have a custom model, use Eloquent. Otherwise, just run a DB query
 		 */
 		$model = $this->getModelNameFromTableName($table_name);
-		if (class_exists($model)) {			
+		if (class_exists($model)) {		
 			$data = $model::query();			
 		} else {
 			$data = DB::table($table_name);
@@ -547,6 +549,7 @@ class CtrlClientController extends Controller
 		 * we may not want to do this when loading an eloquent model?
 		 */
 		$data->select(array_keys($table_headers));
+		
 		$datatables = DataTables::of($data);
 		
 		/**
@@ -627,6 +630,8 @@ class CtrlClientController extends Controller
 		if ($raw_columns) {
 			$datatables->rawColumns($raw_columns);
 		}
+
+		// $datatables->orderColumn('number', 'desc');
 
 		return $datatables->toJson();
 	}

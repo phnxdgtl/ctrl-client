@@ -10,16 +10,21 @@
         "laravel/framework": "^9.0",
         "maatwebsite/excel": "^3.1",
         "league/flysystem-aws-s3-v3": "^3.0",
-        "yajra/laravel-datatables": "^9.0",
         "php-http/curl-client": "^2.2",
         "typesense/typesense-php": "^4.7",
-        "intervention/image": "^2.7"
+        "intervention/image": "^2.7",
+        "spatie/laravel-ray": "^1.32"
     },
     "extra": {
         "laravel": {
             "providers": [
                 "Phnxdgtl\\CtrlClient\\CtrlClientServiceProvider"
             ]
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
         }
     }
 }

@@ -496,7 +496,35 @@ class CtrlClientController extends Controller
 			'success'   => true
 		]);
 	}
+	
+	/**
+	 * Save the new order of a table
+     * @param Request $request 
+     * @return mixed 
+     */
+    public function reorderTable(Request $request) {
+		$validator = Validator::make($request->all(), [
+			'ctrl_table_name'   => 'required|string',
+			'ctrl_order_column' => 'required|string',
+			'ctrl_orders'       => 'required|array'
+		]);
 
+		if ($validator->fails()) {
+			return response()->json($validator->errors(), 422);
+		}
+
+		$data = $validator->validated();
+
+		foreach ($data['ctrl_orders'] as $object_id=>$new_order_value) {
+			DB::table($data['ctrl_table_name'])->where('id', $object_id)->update([
+				$data['ctrl_order_column'] => $new_order_value
+			]);
+		}
+
+		return response()->json([
+			'success'   => true
+		]);
+	}
 
     /**
 	 * Return data about multiple objects, in a Datatables format
@@ -516,6 +544,8 @@ class CtrlClientController extends Controller
 		]);
 
 		$filters = $request->input('ctrl_filters');
+
+		$order_by = $request->input('ctrl_order_by');
 		/**
 		 * If we have a custom model, use Eloquent. Otherwise, just run a DB query
 		 */
@@ -524,6 +554,53 @@ class CtrlClientController extends Controller
 			$data = $model::query();			
 		} else {
 			$data = DB::table($table_name);
+		}
+
+		/**
+		 * We need to pull related values sometimes, such as a player's team
+		 * if a player record has a team_id. Doing this in SQL is the most efficient approach
+		 */
+		/**
+		 * Also track what values we're selecting (builder only? see ->select() below)
+		 */
+		$select = [];
+		foreach ($table_headers as $column=>$column_data) {
+			/**
+			 * Add this column to the select list.
+			 * Use table_name to avoid clashes with ID if we later join any tables.
+			 */
+			$select[] = "{$table_name}.$column";
+
+			if (!empty($column_data['source_table'])) {
+				/**
+				 * This indicates that this is a relationship, so join the related value
+				 */	
+				$source_table  = $column_data['source_table'];
+				$source_column = $column_data['source_column'];
+				$foreign_key   = $column_data['foreign_key'];
+				$local_key     = $column_data['local_key'];
+				
+				/**
+				 * scratchpad: i want to say,
+				 * join ('teams', 'team_players.team_id, '=', 'teams'.'id')
+				 * select(teams.title AS ... er... team_toString?)
+				 * I have:
+				 	"field_type"    => "dropdown"
+				 	"source_table"  => "teams"
+				 	"source_column" => "title"
+				 	"foreign_key"   => "id"
+				 	"local_key"     => "team_id"
+				 */
+
+				if (get_class($data) == 'Illuminate\Database\Query\Builder') {	
+					// TODO: I *think* Eloquent handles joins in the same way as Builder?
+					// So, we can use the join() below for both approaches. This needs testing though.
+				} else {
+					// TODO
+				}
+				$data->join($source_table, "{$table_name}.{$local_key}", '=', "{$source_table}.{$foreign_key}");
+				$select[] = "{$source_table}.{$source_column} AS {$local_key}_toString";
+			}
 		}
 
 		if ($filters) {
@@ -544,96 +621,49 @@ class CtrlClientController extends Controller
 			}			
 		}
 		
+		if ($order_by) {
+			$data->orderBy($order_by);
+		}
 		/**
 		 * Only select the required headers, for speed;
 		 * we may not want to do this when loading an eloquent model?
 		 */
-		$data->select(array_keys($table_headers));
-		
-		$datatables = DataTables::of($data);
-		
-		/**
-		 * Add an ID for each row, this allows us to (eg) highlight the last-edited row
-		 */
-		$datatables->setRowId('id-{{$id}}');
-		
-		/**
-		 * Add datatable buttons
-		 */
-		$row_buttons = $request->input('ctrl_row_buttons') ?? [];	
-        if ($row_buttons) {
-            $datatables->addColumn('action', function ($row) use ($row_buttons) {						
-				array_walk($row_buttons, function(&$value, $key) use ($row) {
-					$value = str_replace('_id_', $row->id, $value);
-				});
-                return view('ctrl::row-buttons', ['row_buttons'=>$row_buttons]);
-            });
-        }
+		$data->select($select);
 
+		$data = $data->paginate();
+		
 		/**
-		 * Process certain columns so that they're rendered differently	
-		 * Also allow us to render HTML in some columns; see https://yajrabox.com/docs/laravel-datatables/master/xss#raw	
+		 * We now need to transform some data items, to (eg) trim long strings
 		 */
-		$raw_columns = [];
-		foreach ($table_headers as $column=>$column_data) {
+
+		 foreach ($table_headers as $column=>$column_data) {
 			$field_type = $column_data['field_type'];
 			
-			if (!empty($column_data['source_table'])) {
+			if (in_array($field_type, ['text', 'textarea', 'wysiwyg'])) {
 				/**
-				 * This indicates that this is a relationship, so pull the related value
-				 */	
-				$datatables->editColumn($column, function($object) use ($column_data) {				
-					$source_table  = $column_data['source_table'];
-					$source_column = $column_data['source_column'];
-					$foreign_key   = $column_data['foreign_key'];
-					$local_key     = $column_data['local_key'];
-					return DB::table($source_table)
-								->where($foreign_key, $object->$local_key)
-								->value($source_column);
-				});
-			}
-			else if (in_array($field_type, ['text', 'textarea', 'wysiwyg'])) {
-				$datatables->editColumn($column, function($object) use ($column) {				
-					return Str::words(html_entity_decode(strip_tags($object->$column)), 15, '...');	    		
-				});
-			} else if (in_array($field_type, ['checkbox'])) {
-				$datatables->editColumn($column, function($object) use ($column) {				
-					return sprintf('<i class="fa-regular fa-lg fa-square%s"></i>', !empty($object->$column) ? '-check' : '');
-				});
-				$raw_columns[] = $column;
+				 * Reduce the length of long strings
+				 **/				
+				$data->transform(function (object $item, int $key) use ($column) {
+					$item->$column = Str::words(html_entity_decode(strip_tags($item->$column)), 15, '...');	   
+					return $item;
+				});			
 			} else if (in_array($field_type, ['image'])) {
-				$datatables->editColumn($column, function($object) use ($column) {				
-					$path  = $object->$column;
-					$thumbnail_name = sprintf('%s/%s', $object->id, $column);							
-					$image_tag = $this->getThumbnameUrlFromImagePath($path, 50, 50, $thumbnail_name, '<img src="%s">');			
-					return $image_tag;	
-					// If we can't load an image we could return this, but... why wouldn't we be able to?
-					// return sprintf('<i class="far fa-image"></i>');
-				});
-				$raw_columns[] = $column;
-			} else if (in_array($field_type, ['date'])) {
-				$datatables->editColumn($column, function($object) use ($column) {				
-					return \Carbon\Carbon::parse($object->$column)->format('d/m/Y');
-				});
-			} else if (in_array($field_type, ['file'])) {
 				/**
-				 * Just return the filename, not the path
-				 * We could trim it as well, but realistically, we rarely use filenames as headers
+				 * Convert local images to full URLs
 				 */
-				$datatables->editColumn($column, function($object) use ($column) {	
-					$path_parts = pathinfo($object->$column);		
-					return $path_parts['basename'];
-				});
+				$data->transform(function (object $item, int $key) use ($column) {
+					if (filter_var($item->$column, FILTER_VALIDATE_URL) === FALSE && $item->$column) {
+						/**
+						 * This will depend on how we're using local storage on the client...
+						 */
+						$item->$column = asset(Storage::url($item->$column));
+					}
+					return $item;
+				});	
 			}
 		}
-		
-		if ($raw_columns) {
-			$datatables->rawColumns($raw_columns);
-		}
 
-		// $datatables->orderColumn('number', 'desc');
-
-		return $datatables->toJson();
+		return $data->toJson();
 	}
 
 	protected function getThumbnameUrlFromImagePath($path, $width, $height, $thumbnail_name, $wrapper = null) {
@@ -647,6 +677,15 @@ class CtrlClientController extends Controller
 		
 		if (!$path) {
 			return false;
+		}
+
+		/**
+		 * WIP/TODO: let's move away from using storage disks, it's too complicated. let's store image paths
+		 * as full URLs. We can thumbnail them on the server if we need to, but Roland Starke will do this.
+		 * So, if we already have the image as a full URL, just send it back to the server:
+		 */
+		if (filter_var($path, FILTER_VALIDATE_URL)) {
+			return $path;
 		}
 
 		$thumbnail_format = 'jpg';

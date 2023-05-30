@@ -652,7 +652,7 @@ class CtrlClientController extends Controller
 				 * Convert local images to full URLs
 				 */
 				$data->transform(function (object $item, int $key) use ($column) {
-					if (filter_var($item->$column, FILTER_VALIDATE_URL) === FALSE && $item->$column) {
+					if (filter_var(str_replace(' ', '%20', $item->$column), FILTER_VALIDATE_URL) === FALSE && $item->$column) {
 						/**
 						 * This will depend on how we're using local storage on the client...
 						 */
@@ -662,7 +662,7 @@ class CtrlClientController extends Controller
 				});	
 			}
 		}
-
+		Log::debug($data->toJson());
 		return $data->toJson();
 	}
 
@@ -684,8 +684,11 @@ class CtrlClientController extends Controller
 		 * as full URLs. We can thumbnail them on the server if we need to, but Roland Starke will do this.
 		 * So, if we already have the image as a full URL, just send it back to the server:
 		 */
-		if (filter_var($path, FILTER_VALIDATE_URL)) {
+		// We check with URL encoding to pass FILTER_VALIDATE_URL; if we encode the whole URL, it fails.
+		if (filter_var(str_replace(' ', '%20', $path), FILTER_VALIDATE_URL)) {
 			return $path;
+		} else {
+			Log::debug(sprintf("Path %s doesn't pass FILTER_VALIDATE_URL", $path));
 		}
 
 		$thumbnail_format = 'jpg';

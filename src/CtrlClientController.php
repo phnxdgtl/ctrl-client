@@ -630,7 +630,11 @@ class CtrlClientController extends Controller
 		 */
 		$data->select($select);
 
-		$data = $data->paginate();
+		/**
+		 * We pass the automatic tabulator querystring (eg ?page=1&size=5) into this endpoint
+		 * The paginator should pick up ?page automatically, but we need to handle ?size manually
+		 */
+		$data = $data->paginate($request->query('size') ?? 15);
 		
 		/**
 		 * We now need to transform some data items, to (eg) trim long strings

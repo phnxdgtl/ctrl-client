@@ -21,6 +21,7 @@ use Intervention\Image\Exception\NotReadableException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schema;
 
 class CtrlClientController extends Controller
 {
@@ -904,19 +905,24 @@ class CtrlClientController extends Controller
         } else {
 
             $log = sprintf("Pulling column %s from table %s. URL format is %s", $table_name, $column, $url);
-            
-            $records = DB::table($table_name)->select('id', $column)->get();
 
-            if (count($records) > 0) {
-                foreach ($records as $record) {
-                    $documents[] = [
-                        'id'       => sprintf('%s-%s', $table_name, $record->id),
-                        'title'    => $record->$column,
-                        'taxonomy' => $taxonomy,
-                        'url'      => str_replace('_id_', $record->id, $url)
-                    ];
-                }                            
-            }
+			/**
+			 * If this table doesn't have an ID column... is it likely to be one that we want to index?
+			 * Let's assume not for now:
+			 */
+			if (Schema::hasColumn($table_name, 'id')) {            
+				$records = DB::table($table_name)->select('id', $column)->get();
+				if (count($records) > 0) {
+					foreach ($records as $record) {
+						$documents[] = [
+							'id'       => sprintf('%s-%s', $table_name, $record->id),
+							'title'    => $record->$column,
+							'taxonomy' => $taxonomy,
+							'url'      => str_replace('_id_', $record->id, $url)
+						];
+					}                            
+				}
+			}
         }
         Log::debug($log);
         if ($documents) {

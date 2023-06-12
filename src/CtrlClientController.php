@@ -544,7 +544,12 @@ class CtrlClientController extends Controller
 			'id'=>['field_type'=>'number']
 		]);
 
-		$filters = $request->input('ctrl_filters');
+		/**
+		 * We filter core objects in CTRL (ie, show all pages in a category),
+		 * and table records via Tabulator (eg, all pages with the title "about")
+		 */
+		$ctrl_filters  = $request->input('ctrl_filters');
+		$table_filters = $request->input('filter');
 
 		$order_by = $request->input('ctrl_order_by');
 		/**
@@ -604,12 +609,12 @@ class CtrlClientController extends Controller
 			}
 		}
 
-		if ($filters) {
+		if ($ctrl_filters) {
 			/**
 			 * There could be an "elegant" laravel solution here, using Arr:divide or Arr:flatten,
 			 * but TBH we might just be overcomplicating it for the sake of using Laravel:
 			 */
-			foreach ($filters as $filter_key=>$filter_value) {
+			foreach ($ctrl_filters as $filter_key=>$filter_value) {
 				if (!is_array($filter_value)) {
 					/**
 					 * TODO: how do we tell the difference between a DataTables QS parameter
@@ -620,6 +625,21 @@ class CtrlClientController extends Controller
 					$data->where($filter_key, $filter_value);
 				}
 			}			
+		}
+		if ($table_filters) {
+			/**
+			 * Tabulator filters look like this:
+			 * ?filter[0][field]=email&filter[0][type]=like&filter[0][value]
+			 */
+			foreach ($table_filters as $filter) {
+				switch ($filter['type']) {
+					case 'like':
+						$data->where($filter['field'], 'LIKE', '%'.$filter['value'] .'%');
+						break;
+					default:
+						Log::debug(sprintf("Unhandled filter type %s", $filter['type']));
+				}
+			}
 		}
 		
 		if ($order_by) {
